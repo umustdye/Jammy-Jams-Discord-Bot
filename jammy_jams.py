@@ -19,17 +19,21 @@ import nest_asyncio
 import os
 #To choose random song for shuffle
 import random
+from collections import deque
+import time
 
 
 #initialize the client/bot
 #client = discord.Client()
 client = commands.Bot(command_prefix="!")
 BOT_TOKEN = ""
-queue = {}
+song_queue = deque()
 master_volume = None
 
+        
     
-
+    
+    
 def play_song(ctx, link, video_name):
     yt_opt = {         
         'format': 'bestaudio/best',
@@ -47,6 +51,7 @@ def play_song(ctx, link, video_name):
         if file.endswith(".mp3"):
             os.rename(file, "song.mp3")
     global master_volume
+    global song_queue
     guild = ctx.message.guild
     voice_client = ctx.voice_client          
     voice_client.play(discord.FFmpegPCMAudio("song.mp3"), after=lambda e:print(video_name + " has finished playing"))
@@ -69,6 +74,10 @@ async def on_ready():
         await jammy_channel.send("Jammy Jams is reporting for duty!")
         global master_volume
         master_volume = 0.40
+        
+#@client.event
+#async def play_next_song():
+    
 
 @client.command(pass_context = True)
 async def join(ctx):
@@ -86,10 +95,10 @@ async def volume(ctx, change):
     global master_volume
     if(change == "up"):
         #if master_volume <= .9:
-        print("volume up")
+        print(master_volume)
         master_volume += 0.1
     if(change == "down"):
-        print("volume down")
+        print(master_volume())
         master_volume -= 0.1
         
     else:
@@ -116,6 +125,7 @@ async def play(ctx, *, search_term):
     text_channel = client.get_channel(800145177690898473)
     #connect to the jammy voice channel
     voice_channel = client.get_channel(799871091404570658)
+    global song_queue
     
     #check if the bot is already connected and connect if it is not
     if connected(ctx) == None:
@@ -130,13 +140,13 @@ async def play(ctx, *, search_term):
         #print(results)
         link = 'https://www.youtube.com' + results[0].get('url_suffix')
         video_name = results[0].get('title')
-
+        next_song = {'video_name':video_name, 'link':link}
+        song_queue.append(next_song)
 
         voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
         if voice.is_playing():
             await text_channel.send(video_name + " has been added to the queue")
-            next_song = {'video_name':video_name, 'link':link}
-            queue.append(next_song)
+
             
             
         else:
@@ -146,7 +156,7 @@ async def play(ctx, *, search_term):
                 if song_there:
                     os.remove("song.mp3")
             except PermissionError:
-                    await text_channel("Sorry Jammy cannot play the jams")
+                    await text_channel.send("Sorry Jammy cannot play the jams")
                     return  
             await text_channel.send("Preparing song...")
             play_song(ctx, link, video_name)
@@ -157,7 +167,47 @@ async def play(ctx, *, search_term):
     else:
         await text_channel.send("Sorry Jammy could not find a cool enough video. Please make your request more specific and try again.")
 
-     
+
+
+
+@client.command(pass_context = True)
+async def queue(ctx, *, search_term):
+    #connect to the jammy messages channel
+    text_channel = client.get_channel(800145177690898473)
+    global song_queue
+    #dictionary to hold the search term result from YouTube
+    results = YoutubeSearch(search_term, max_results=1).to_dict()
+    #if a result was found
+    if(results):
+        #print(results)
+        link = 'https://www.youtube.com' + results[0].get('url_suffix')
+        video_name = results[0].get('title')
+
+        #add song to the queue
+        await text_channel.send(video_name + " has been added to the queue")
+        await text_channel.send(link)
+        next_song = {'video_name':video_name, 'link':link}
+        song_queue.append(next_song)
+            
+        
+        
+    else:
+        await text_channel.send("Sorry Jammy could not find a cool enough video. Please make your request more specific and try again.")
+
+
+
+@client.command(pass_context = True)
+async def next_song(ctx):
+    #connect to the jammy messages channel
+    text_channel = client.get_channel(800145177690898473)
+    global song_queue
+    if(len(song_queue) > 1):
+        #add song to the queue
+        await text_channel.send(song_queue[1]['video_name'] + " is next in the queue")
+        #await text_channel.send(song_queue[0]['link'])
+              
+    else:
+        await text_channel.send("Jammy Jams does not have another song to play")
 
         
 @client.command(pass_context = True)
@@ -208,7 +258,39 @@ async def stop(ctx):
     voice.stop()
 
 
-
+@client.command()
+async def skip(ctx):
+    voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+    if voice.is_playing():
+        voice.stop()
+    #connect to the jammy messages channel
+    text_channel = client.get_channel(800145177690898473)
+    #connect to the jammy voice channel
+    voice_channel = client.get_channel(799871091404570658)
+    global song_queue
+    
+    #check if the bot is already connected and connect if it is not
+    if connected(ctx) == None:
+        await voice_channel.connect()
+      
+    #remove the song that was currently playing
+    song_queue.popleft()
+    print(song_queue)
+    time.sleep(.5)
+    
+    if(song_queue):
+        song_there = os.path.isfile("song.mp3")
+        try:
+            if song_there:
+                os.remove("song.mp3")
+        except PermissionError:
+            await text_channel.send("Sorry Jammy cannot play the jams")
+            return  
+        await text_channel.send("Preparing song...")
+        play_song(ctx, song_queue[0]['link'], song_queue[0]['video_name'])
+        await text_channel.send("Now playing: " + song_queue[0]['video_name'])
+        await text_channel.send(song_queue[0]['link'])
+        
 
 
 
@@ -254,7 +336,9 @@ async def bigbutt(ctx):
         await text_channel.send("A Big Butt Heidi for my Honey Bunny")
         await text_channel.send(file=File(f, 'big_butt_heidi.jpg'))
         
-        
+    global song_queue
+    next_song = {'video_name':video_name, 'link':link}
+    song_queue.append(next_song)    
     song_there = os.path.isfile("song.mp3")
     try:
         if song_there:
