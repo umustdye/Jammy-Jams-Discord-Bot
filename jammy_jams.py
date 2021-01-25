@@ -38,7 +38,17 @@ repeat_song = False
 ''' ----- HELPER FUNCTIONS ----- '''   
   
 async def play_song(ctx, link, video_name):
+    #Jammy Jams text channel to tell the user if Jammy Jams can play the requested song or not
     text_channel = client.get_channel(text_channel_id)
+    
+    #Jammy Jams volume
+    global master_volume
+
+    #The Jammy Jams voice client for playing the song
+    voice_client = ctx.voice_client 
+    
+    #FFMPEG requires a file named song.mp3 to download the song from youtube and play it
+    #if the file cannot be overwritten then it throws an exception
     song_there = os.path.isfile("song.mp3")
     try:
         if song_there:
@@ -49,6 +59,7 @@ async def play_song(ctx, link, video_name):
     await text_channel.send("Preparing song...")
             
 
+    #Set the settings for the song download
     yt_opt = {         
         'format': 'bestaudio/best',
         'postprocessors': [{
@@ -57,23 +68,31 @@ async def play_song(ctx, link, video_name):
         'preferredquality': '192',
     }],}
         
+    #download the song from youtube
     with youtube_dl.YoutubeDL(yt_opt) as yt:
         yt.download([link])
-        
+      
+    # after the song finishes downloading, tell the user what song is playing
     await text_channel.send("Now playing: " + video_name)
     await text_channel.send(link)        
-            
+     
+    #rename the downloaded song as song.mp3       
     for file in os.listdir("./"):
         if file.endswith(".mp3"):
             os.rename(file, "song.mp3")
-    global master_volume
-    global song_queue
-    guild = ctx.message.guild
-    voice_client = ctx.voice_client 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
             
+
+    
+    #use the following commented line if you just want one song to play        
     #voice_client.play(discord.FFmpegPCMAudio("song.mp3"), after=lambda e:print(video_name + " has finished playing"))
+    
+    '''
+    Because the voice_client.play() function is not an async function, I cannot call
+    another function that is async without the await keyword, so I used the 
+    asyncio.run_coroutine_threadsafe() as a replacement for the await keyword
+    So after the song finished playing, it'll call the play next function which will prepare
+    the next song if there is one
+    '''
     voice_client.play(discord.FFmpegPCMAudio("song.mp3"), after=lambda e: asyncio.run_coroutine_threadsafe(play_next_song(ctx), client.loop))
     voice_client.source = discord.PCMVolumeTransformer(voice_client.source)
     voice_client.source.volume = float(master_volume)
@@ -81,6 +100,7 @@ async def play_song(ctx, link, video_name):
     #voice_client.cleanup()
 
 
+#check if jammy jams is already connected to the voice channel
 def connected(ctx):
     voice_client = get(ctx.bot.voice_clients, guild=ctx.guild)
     return voice_client and voice_client.is_connected()
@@ -90,25 +110,33 @@ def connected(ctx):
 async def play_next_song(ctx):
     await asyncio.sleep(2)
     global song_queue
+    #jammy jams voice channel
     voice_channel = client.get_channel(voice_channel_id)
+    #jammy jams text channel
     text_channel = client.get_channel(text_channel_id)
 
     time.sleep(.5)
-    if(len(song_queue) > 0):
-        await text_channel.send(song_queue[0]['video_name'] + " has finished playing.")
-        if repeat_song == False:
-            song_queue.popleft()
-            
-        else:
-            await text_channel.send("Repeating song...")
-
+    
+    await text_channel.send(song_queue[0]['video_name'] + " has finished playing.")
+    
+    
+    #if the user did not want to repeat the current song then move to the next song in the queue
+    if repeat_song == False:
+        song_queue.popleft()    
+        #if there is another song next in the queue then play that song
         if(len(song_queue)>0):
             await play_song(ctx, song_queue[0]['link'], song_queue[0]['video_name'])
-
-        
-        
+        #if there isn't another song to play next
+        else:
+            await text_channel.send("Jammy Jams is out of song requests.")
+            
+    #repeat the current song        
     else:
-        await text_channel.send("Jammy Jams is out of song requests.")
+        await text_channel.send("Repeating song...")
+        await play_song(ctx, song_queue[0]['link'], song_queue[0]['video_name'])
+        
+        
+
 
 
 
