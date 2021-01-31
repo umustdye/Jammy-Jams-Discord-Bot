@@ -121,7 +121,6 @@ async def play_next_song(ctx):
     
     await text_channel.send(song_queue[0]['video_name'] + " has finished playing.")
 
-    
     #if the user did not want to repeat the current song then move to the next song in the queue
     if repeat_song == False and if_play_queue == False:
         song_queue.popleft()    
@@ -231,7 +230,7 @@ async def play(ctx, *, search_term):
         #if there is already another song playing, add the requested song to the queue
         #the second part checks if we are not at the end of the song queue
         #if voice.is_playing() or (song_index < len(song_queue)-1):
-        if (voice.is_playing() or voice.is_paused()) and len(song_queue) > 0:
+        if (voice.is_playing() or voice.is_paused()) or len(song_queue) > 1:
             await text_channel.send(video_name + " has been added to the queue")
 
             
@@ -353,7 +352,12 @@ async def leave(ctx):
 @client.command()
 async def resume(ctx):
     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+    voice_channel = client.get_channel(voice_channel_id)
+
     if voice.is_paused():
+        #check if the bot is already connected and connect if it is not
+        if connected(ctx) == None:
+            await voice_channel.connect()
         voice.resume()
     else:
         await ctx.send("The audio is not paused.")
@@ -380,11 +384,10 @@ async def stop(ctx):
     repeat_song = False
     voice.stop()
 
-
 @client.command()
 async def skip(ctx):
     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
-    if voice.is_playing():
+    if voice.is_playing() or voice.is_paused():
         voice.stop()
     #connect to the jammy messages channel
     text_channel = client.get_channel(text_channel_id)
@@ -437,15 +440,7 @@ async def clear_queue(ctx):
     else:
         await text_channel.send("There are no songs for Jammy Jams to clear")
         
-#DO AN ERROR CHECK IF THERE IS A SONG ALREADY PLAYING-----------        
-@client.command(pass_context = True)
-async def remove(ctx, index):
-    global song_queue
-    text_channel = client.get_channel(text_channel_id)
-    if index>=0 or index < len(song_queue):
-        text_channel.send("Removed "+song_queue[index]["video_name"] + " from song queue")
-        song_queue.remove(index)
-#-------------------------------------------------------------------------------------------
+
 
 @client.command(pass_context = True)
 async def repeat(ctx):
@@ -458,6 +453,7 @@ async def repeat(ctx):
     else:
        repeat_song = False 
        await text_channel.send("Repeat turned off for current song")
+
 
 
 
