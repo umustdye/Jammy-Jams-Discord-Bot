@@ -33,6 +33,7 @@ master_volume = None
 voice_channel_id = 
 text_channel_id = 
 repeat_song = False
+if_play_queue = False
         
     
 ''' ----- HELPER FUNCTIONS ----- '''   
@@ -110,6 +111,7 @@ def connected(ctx):
 async def play_next_song(ctx):
     await asyncio.sleep(2)
     global song_queue
+    global if_play_queue
     #jammy jams voice channel
     voice_channel = client.get_channel(voice_channel_id)
     #jammy jams text channel
@@ -118,10 +120,12 @@ async def play_next_song(ctx):
     time.sleep(.5)
     
     await text_channel.send(song_queue[0]['video_name'] + " has finished playing.")
-    
+    print("Hello")
+    print(song_queue)
+    print(if_play_queue)
     
     #if the user did not want to repeat the current song then move to the next song in the queue
-    if repeat_song == False:
+    if repeat_song == False and if_play_queue == False:
         song_queue.popleft()    
         #if there is another song next in the queue then play that song
         if(len(song_queue)>0):
@@ -132,10 +136,17 @@ async def play_next_song(ctx):
             
     #repeat the current song        
     else:
-        await text_channel.send("Repeating song...")
+        if if_play_queue == True:
+            if_play_queue = False
+            await text_channel.send("Playing from begininng of queue...")
+        
+            
+        if repeat_song == True:
+            await text_channel.send("Repeating song...")
+        
         await play_song(ctx, song_queue[0]['link'], song_queue[0]['video_name'])
         
-        
+    
 
 
 
@@ -222,7 +233,7 @@ async def play(ctx, *, search_term):
         #if there is already another song playing, add the requested song to the queue
         #the second part checks if we are not at the end of the song queue
         #if voice.is_playing() or (song_index < len(song_queue)-1):
-        if voice.is_playing() and len(song_queue) > 0:
+        if (voice.is_playing() or voice.is_paused()) and len(song_queue) > 0:
             await text_channel.send(video_name + " has been added to the queue")
 
             
@@ -234,6 +245,45 @@ async def play(ctx, *, search_term):
         
     else:
         await text_channel.send("Sorry Jammy could not find a cool enough video. Please make your request more specific and try again.")
+
+
+
+
+
+@client.command(pass_context = True)
+async def play_queue(ctx):
+    #connect to the jammy messages channel
+    text_channel = client.get_channel(text_channel_id)
+    #connect to the jammy voice channel
+    voice_channel = client.get_channel(voice_channel_id)
+    global song_queue
+    global if_play_queue
+    
+    if len(song_queue) > 0:
+        #check if the bot is already connected and connect if it is not
+        if connected(ctx) == None:
+            await voice_channel.connect()
+        
+    
+        voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+        await text_channel.send("Jammy Jams is playing from the begining of the song queue")
+
+        #if there is already a song playing, stop the song and play from the begining of the queue
+        if voice.is_playing():
+            if_play_queue = True
+            voice.stop()
+
+            
+        #if there is curently no song playing play from the begining of the song queue   
+        else:
+            link = song_queue[0]['link']
+            video_name = song_queue[0]['video_name']
+            await play_song(ctx, link, video_name)
+
+        
+        
+    else:
+        await text_channel.send("Sorry Jammy cannot play from an empty song queue.")
 
 
 
@@ -285,7 +335,11 @@ async def leave(ctx):
     #connect to the jammy voice channel
     voice_channel = client.get_channel(voice_channel_id)
     channels = client.voice_clients
+    #turn off repeat 
+    global repeat_song
+    repeat_song = False
     for channel in channels:
+        
         if channel.is_connected():
             await channel.disconnect()
             #await jammy_channel.send("Jammy Jams has left the music party.")
@@ -323,6 +377,9 @@ async def pause(ctx):
 @client.command()
 async def stop(ctx):
     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+    #turn of repeat
+    global repeat_song
+    repeat_song = False
     voice.stop()
 
 
@@ -341,7 +398,10 @@ async def skip(ctx):
     if connected(ctx) == None:
         await voice_channel.connect()
         
-        
+    #turn of repeat if it was already on
+    global repeat_song
+    repeat_song = False
+    
     await text_channel.send("Skipping the current song...")
 
 
@@ -354,13 +414,40 @@ async def view_queue(ctx):
     
     if(len(song_queue) > 0):
         await text_channel.send("Songs in queue...")
+        index = 0
         for song in song_queue:
-            await text_channel.send(song['video_name'])
+            await text_channel.send(str(index) + ".) " + song['video_name'])
+            index += 1
             
     else:
         await text_channel.send("Jammy Jams has no current requests")
+        
 
-
+@client.command(pass_context = True)
+async def clear_queue(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    global song_queue
+    voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+    
+    if voice.is_playing() or voice.pause():
+        voice.stop()
+        
+    if(len(song_queue) > 0):
+        await text_channel.send("Jammy Jams is clearing the song queue")
+        song_queue.clear()
+        
+    else:
+        await text_channel.send("There are no songs for Jammy Jams to clear")
+        
+#DO AN ERROR CHECK IF THERE IS A SONG ALREADY PLAYING-----------        
+@client.command(pass_context = True)
+async def remove(ctx, index):
+    global song_queue
+    text_channel = client.get_channel(text_channel_id)
+    if index>=0 or index < len(song_queue):
+        text_channel.send("Removed "+song_queue[index]["video_name"] + " from song queue")
+        song_queue.remove(index)
+#-------------------------------------------------------------------------------------------
 
 @client.command(pass_context = True)
 async def repeat(ctx):
@@ -376,6 +463,130 @@ async def repeat(ctx):
 
 
 
+
+# FOR FUN RANDOM COMMANDS!-----------------------------------------------------------
+
+@client.command(pass_context = True)
+async def love(ctx, *, person):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("I love you "+ person)
+  
+@client.command(pass_context = True)
+async def love_response(ctx, *, person):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("I love you more " + person)      
+ 
+@client.command(pass_context = True)    
+async def kiss(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("A Heidi kiss for you")
+    
+    
+@client.command(pass_context = True)    
+async def fat(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Wooooooooowwww I am not fat")
+    
+    
+@client.command(pass_context = True)    
+async def bigbutt(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    #connect to the jammy voice channel
+    voice_channel = client.get_channel(voice_channel_id)
+    if (connected(ctx)==None):
+        await voice_channel.connect()
+    link = 'https://www.youtube.com/watch?v=X53ZSxkQ3Ho'
+    video_name = "Baby Got Back"
+    file_name = "..\\pictures\\butt.jpg"
+    with open(file_name, 'rb') as f:
+        await text_channel.send("A Big Butt Heidi for my Honey Bunny")
+        await text_channel.send(file=File(f, 'big_butt_heidi.jpg'))
+        
+    global song_queue
+    next_song = {'video_name':video_name, 'link':link}
+    song_queue.append(next_song)    
+
+    play_song(ctx, link, video_name)
+
+
+@client.command(pass_context = True)    
+async def tease(ctx, *, message):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Wooooooooowwww I do not have a "+ message + "\nMeanie") 
+    
+    
+@client.command(pass_context = True)
+async def witch(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    file_name = "..\pictures\witchy_heidi.jpg"
+    with open(file_name, 'rb') as f:
+        await text_channel.send("A Witchy Heidi for my Honey Bunny")
+        await text_channel.send(file=File(f, 'witchy_heidi.jpg'))
+        
+@client.command(pass_context = True)
+async def cuteheidiface(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    pic_indx = random.randint(1, 11)
+    file_name = "..\pictures\cute_heidi\\" + str(pic_indx) + ".jpg"
+    with open(file_name, 'rb') as f:
+        await text_channel.send("A Cute Faced Heidi for my Honey Bunny")
+        await text_channel.send(file=File(f, 'cute_heidi.png'))   
+        
+        
+@client.command(pass_context = True)
+async def boobp(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    file_name = "..\pictures\\boobp.jpg"
+    with open(file_name, 'rb') as f:
+        await text_channel.send("Boobp")
+        await text_channel.send(file=File(f, 'boobp.jpg'))  
+
+
+@client.command(pass_context = True)
+async def sexyheidi(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    pic_indx = random.randint(1, 9)
+    file_name = "..\pictures\sexy_heidi\\" + str(pic_indx) + ".jpg"
+    with open(file_name, 'rb') as f:
+        await text_channel.send("A Sexy Heidi for my Honey Bunny")
+        await text_channel.send(file=File(f, 'sexy_heidi.png'))   
+
+
+@client.command(pass_context = True)
+async def sebastian(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Sebastian is Heidi's one and only love in life and she loves him with all her heart")
+        
+@client.command(pass_context = True)
+async def horndog(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Oh my...")
+
+@client.command(pass_context = True)
+async def butt(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Wowwwwwwwwww")      
+        
+@client.command(pass_context = True)
+async def pew(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Pew")
+    
+@client.command(pass_context = True)
+async def poke(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Poke")
+
+
+@client.command(pass_context = True)
+async def boop(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Boop")
+    
+@client.command(pass_context = True)
+async def meow(ctx):
+    text_channel = client.get_channel(text_channel_id)
+    await text_channel.send("Meow")
 
 #allow nested event loops to run the client/bot in the console
 nest_asyncio.apply() 
